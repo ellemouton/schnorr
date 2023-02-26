@@ -19,6 +19,12 @@ func NewPublicKey(p *secp256k1.Point) *PublicKey {
 	return &PublicKey{p}
 }
 
+// NewInfinityPubKey constructs a new PublicKey at infinity. This is effectively
+// a zero value PublicKey.
+func NewInfinityPubKey() *PublicKey {
+	return &PublicKey{secp256k1.NewInfinityPoint()}
+}
+
 // NewPubKeyFromHexString constructs a new PublicKey from the passed hex string.
 func NewPubKeyFromHexString(s string) (*PublicKey, error) {
 	b, err := hex.DecodeString(s)
@@ -68,6 +74,7 @@ func NewPubKeyFromBytes(b []byte) (*PublicKey, error) {
 		return nil, fmt.Errorf("could not lift x")
 	}
 
+	// Make sure that the point returned has an even Y value.
 	if y.Num.Bit(0) != 0 {
 		y.Num.Sub(secp256k1.P, y.Num)
 	}
@@ -88,7 +95,7 @@ func (p *PublicKey) Bytes() [PubKeyBytesLen]byte {
 	return b
 }
 
-// HasEvenY returns true if the public key's Y coordinate is even.
+// HasEvenY returns true if the public key'S Y coordinate is even.
 func (p *PublicKey) HasEvenY() bool {
 	if p.IsInfinity {
 		return true
@@ -102,10 +109,21 @@ func (p *PublicKey) Copy() *PublicKey {
 	return &PublicKey{p.Point.Copy()}
 }
 
+// Equal returns true if the two PublicKeys are the same.
 func (p *PublicKey) Equal(o *PublicKey) bool {
 	if p.IsInfinity || o.IsInfinity {
 		return p.IsInfinity && o.IsInfinity
 	}
 
 	return p.X.Equal(o.X)
+}
+
+// Add adds the two PublicKey points and returns the result.
+func (p *PublicKey) Add(o *PublicKey) *PublicKey {
+	return &PublicKey{p.Point.Add(o.Point)}
+}
+
+// Mul multiplies the Public key with the given constant and returns the result.
+func (p *PublicKey) Mul(c *big.Int) *PublicKey {
+	return &PublicKey{p.Point.Mul(c)}
 }

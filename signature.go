@@ -10,19 +10,19 @@ const SignatureSize = 64
 
 // Signature is a schnorr signature.
 type Signature struct {
-	r *PublicKey
-	s *big.Int
+	R *PublicKey
+	S *big.Int
 }
 
 // NewSignature constructs a new signature.
 func NewSignature(r *PublicKey, s *big.Int) (*Signature, error) {
 	if s.Cmp(secp256k1.N) >= 0 {
-		return nil, fmt.Errorf("invalid s")
+		return nil, fmt.Errorf("invalid S")
 	}
 
 	return &Signature{
-		r: r,
-		s: s,
+		R: r,
+		S: s,
 	}, nil
 }
 
@@ -45,9 +45,9 @@ func NewSignatureFromBytes(b []byte) (*Signature, error) {
 // Bytes returns the byte representation of the signature.
 func (s *Signature) Bytes() [SignatureSize]byte {
 	var sig [SignatureSize]byte
-	rBytes := s.r.Bytes()
+	rBytes := s.R.Bytes()
 	copy(sig[:32], rBytes[:])
-	copy(sig[32:], s.s.Bytes())
+	copy(sig[32:], s.S.Bytes())
 
 	return sig
 }
@@ -61,23 +61,64 @@ func (s *Signature) Verify(pk *PublicKey, msg []byte) error {
 		return err
 	}
 
-	rBytes := s.r.Bytes()
+	rBytes := s.R.Bytes()
 	e := intFromByte(
 		TaggedHash(Bip340ChallengeTag, rBytes[:], pkBytes[:], msg),
 	)
 
-	one := secp256k1.G.Mul(s.s)
+	one := NewPublicKey(secp256k1.G.Mul(s.S))
 	two := P.Mul(e).Mul(big.NewInt(-1))
 
-	R := NewPublicKey(one.Add(two))
+	R := one.Add(two)
 
 	if !R.HasEvenY() {
 		return fmt.Errorf("R does not have even Y")
 	}
 
-	if !R.Equal(s.r) {
+	if !R.Equal(s.R) {
 		return fmt.Errorf("invalid sig")
 	}
 
 	return nil
+}
+
+// BatchVerify does batch schnorr verification of the given set of pubkeys,
+// messages and signatures.
+//
+// NOTE: this currently is not secure since the coefficients have not been
+// applied yet and so is subject to a cancellation attack.
+// TODO(elle): add the coefficients.
+func BatchVerify(pks []*PublicKey, msgs [][]byte, sigs []*Signature) error {
+	if len(pks) != len(msgs) || len(pks) != len(sigs) {
+		return fmt.Errorf("same number of pub keys, messages and " +
+			"sigs must be passed in")
+	}
+
+	// S = R + ed
+	// S = R + eP
+	// (s1+s2+s3+...)*G =? (R1+R2+R3+...) + (e1P1+e2P2+e3P3+...)
+	var (
+		sAcc  = new(big.Int)
+		rAcc  = NewInfinityPubKey()
+		epAcc = NewInfinityPubKey()
+	)
+	for i, sig := range sigs {
+		rBytes := sig.R.Bytes()
+		pBytes := pks[i].Bytes()
+		e := intFromByte(TaggedHash(
+			Bip340ChallengeTag, rBytes[:], pBytes[:], msgs[i],
+		))
+
+		epAcc = epAcc.Add(pks[i].Mul(e))
+		rAcc = rAcc.Add(sig.R)
+		sAcc.Add(sAcc, sig.S)
+	}
+
+	S := NewPublicKey(secp256k1.G.Mul(sAcc))
+
+	if S.Equal(rAcc.Add(epAcc)) {
+		return nil
+	}
+
+	return fmt.Errorf("batch verification failed")
 }

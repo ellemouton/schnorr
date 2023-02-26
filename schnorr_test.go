@@ -10,7 +10,8 @@ import (
 
 // TestSign asserts the behaviour of the Sign method using the test vectors
 // found at:
-//    https://github.com/bitcoin/bips/blob/master/bip-0340/test-vectors.csv
+//
+//	https://github.com/bitcoin/bips/blob/master/bip-0340/test-vectors.csv
 func TestSign(t *testing.T) {
 	tests := []struct {
 		sk  string
@@ -77,7 +78,8 @@ func TestSign(t *testing.T) {
 
 // TestVerify asserts the behaviour of the Verify method using the test vectors
 // found at:
-//    https://github.com/bitcoin/bips/blob/master/bip-0340/test-vectors.csv
+//
+//	https://github.com/bitcoin/bips/blob/master/bip-0340/test-vectors.csv
 func TestVerify(t *testing.T) {
 	tests := []struct {
 		pk    string
@@ -167,6 +169,59 @@ func TestVerify(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestBatchVerify(t *testing.T) {
+	sigSet := []struct {
+		pk  string
+		msg string
+		sig string
+	}{
+		{
+			pk:  "F9308A019258C31049344F85F89D5229B531C845836F99B08601F113BCE036F9",
+			msg: "0000000000000000000000000000000000000000000000000000000000000000",
+			sig: "E907831F80848D1069A5371B402410364BDF1C5F8307B0084C55F1CE2DCA821525F66A4A85EA8B71E482A74F382D2CE5EBEEE8FDB2172F477DF4900D310536C0",
+		},
+		{
+			pk:  "DFF1D77F2A671C5F36183726DB2341BE58FEAE1DA2DECED843240F7B502BA659",
+			msg: "243F6A8885A308D313198A2E03707344A4093822299F31D0082EFA98EC4E6C89",
+			sig: "6896BD60EEAE296DB48A229FF71DFE071BDE413E6D43F917DC8DCF8C78DE33418906D11AC976ABCCB20B091292BFF4EA897EFCB639EA871CFA95F6DE339E4B0A",
+		},
+		{
+			pk:  "DD308AFEC5777E13121FA72B9CC1B7CC0139715309B086C960E18FD969774EB8",
+			msg: "7E2D58D8B3BCDF1ABADEC7829054F90DDA9805AAB56C77333024B9D0A508B75C",
+			sig: "5831AAEED7B44BB74E5EAB94BA9D4294C49BCF2A60728D8B4C200F50DD313C1BAB745879A5AD954A72C45A91C3A51D3C7ADEA98D82F8481E0E1E03674A6F3FB7",
+		},
+		{
+			pk:  "25D1DFF95105F5253C4022F628A996AD3A0D95FBF21D468A1B33F8C160D8F517",
+			msg: "FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF",
+			sig: "7EB0509757E246F19449885651611CB965ECC1A187DD51B64FDA1EDC9637D5EC97582B9CB13DB3933705B32BA982AF5AF25FD78881EBB32771FC5922EFC66EA3",
+		},
+	}
+
+	var (
+		pks  []*PublicKey
+		sigs []*Signature
+		msgs [][]byte
+	)
+
+	for _, item := range sigSet {
+		pk, err := NewPubKeyFromHexString(item.pk)
+		require.NoError(t, err)
+
+		msg := readHexString(t, item.msg)
+		sigBytes := readHexString(t, item.sig)
+
+		sig, err := NewSignatureFromBytes(sigBytes)
+		require.NoError(t, err)
+
+		pks = append(pks, pk)
+		sigs = append(sigs, sig)
+		msgs = append(msgs, msg)
+	}
+
+	err := BatchVerify(pks, msgs, sigs)
+	require.NoError(t, err)
 }
 
 func readHexString(t *testing.T, s string) []byte {

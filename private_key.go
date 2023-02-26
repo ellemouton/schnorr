@@ -127,7 +127,9 @@ func (p *PrivateKey) Sign(msg, aux []byte) (*Signature, error) {
 		return nil, err
 	}
 
-	// Verify here.
+	if err = sig.Verify(p.PubKey, msg); err != nil {
+		return nil, fmt.Errorf("sig verification failed: %v", err)
+	}
 
 	return sig, nil
 }
