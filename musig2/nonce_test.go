@@ -1,0 +1,123 @@
+package musig2
+
+import (
+	"bytes"
+	"encoding/hex"
+	"fmt"
+	"github.com/ellemouton/schnorr"
+	"github.com/stretchr/testify/require"
+	"testing"
+)
+
+func TestNonceGen(t *testing.T) {
+	tests := []struct {
+		rand     string
+		sk       string
+		pk       string
+		aggPk    string
+		msg      string
+		extraIn  string
+		expected string
+	}{
+		{
+			rand:     "0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F",
+			sk:       "0202020202020202020202020202020202020202020202020202020202020202",
+			pk:       "024D4B6CD1361032CA9BD2AEB9D900AA4D45D9EAD80AC9423374C451A7254D0766",
+			aggPk:    "0707070707070707070707070707070707070707070707070707070707070707",
+			msg:      "0101010101010101010101010101010101010101010101010101010101010101",
+			extraIn:  "0808080808080808080808080808080808080808080808080808080808080808",
+			expected: "B114E502BEAA4E301DD08A50264172C84E41650E6CB726B410C0694D59EFFB6495B5CAF28D045B973D63E3C99A44B807BDE375FD6CB39E46DC4A511708D0E9D2024D4B6CD1361032CA9BD2AEB9D900AA4D45D9EAD80AC9423374C451A7254D0766",
+		},
+		{
+			rand:     "0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F",
+			sk:       "0202020202020202020202020202020202020202020202020202020202020202",
+			pk:       "024D4B6CD1361032CA9BD2AEB9D900AA4D45D9EAD80AC9423374C451A7254D0766",
+			aggPk:    "0707070707070707070707070707070707070707070707070707070707070707",
+			extraIn:  "0808080808080808080808080808080808080808080808080808080808080808",
+			expected: "E862B068500320088138468D47E0E6F147E01B6024244AE45EAC40ACE5929B9F0789E051170B9E705D0B9EB49049A323BBBBB206D8E05C19F46C6228742AA7A9024D4B6CD1361032CA9BD2AEB9D900AA4D45D9EAD80AC9423374C451A7254D0766",
+		},
+		{
+			rand:     "0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F",
+			sk:       "0202020202020202020202020202020202020202020202020202020202020202",
+			pk:       "024D4B6CD1361032CA9BD2AEB9D900AA4D45D9EAD80AC9423374C451A7254D0766",
+			aggPk:    "0707070707070707070707070707070707070707070707070707070707070707",
+			msg:      "2626262626262626262626262626262626262626262626262626262626262626262626262626",
+			extraIn:  "0808080808080808080808080808080808080808080808080808080808080808",
+			expected: "3221975ACBDEA6820EABF02A02B7F27D3A8EF68EE42787B88CBEFD9AA06AF3632EE85B1A61D8EF31126D4663A00DD96E9D1D4959E72D70FE5EBB6E7696EBA66F024D4B6CD1361032CA9BD2AEB9D900AA4D45D9EAD80AC9423374C451A7254D0766",
+		},
+		{
+			rand:     "0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F0F",
+			sk:       "null",
+			pk:       "02F9308A019258C31049344F85F89D5229B531C845836F99B08601F113BCE036F9",
+			aggPk:    "null",
+			msg:      "null",
+			extraIn:  "null",
+			expected: "89BDD787D0284E5E4D5FC572E49E316BAB7E21E3B1830DE37DFE80156FA41A6D0B17AE8D024C53679699A6FD7944D9C4A366B514BAF43088E0708B1023DD289702F9308A019258C31049344F85F89D5229B531C845836F99B08601F113BCE036F9",
+		},
+	}
+
+	for i, test := range tests {
+		name := fmt.Sprintf("%d", i)
+		t.Run(name, func(t *testing.T) {
+			pkBytes := parseHexStr(t, test.pk)
+
+			pk, err := schnorr.ParsePlainPubKey(pkBytes)
+			require.NoError(t, err)
+
+			var opts []NonceGenOption
+
+			if test.rand != "null" {
+				var rand [32]byte
+				copy(rand[:], parseHexStr(t, test.rand))
+
+				opts = append(opts, WithRandBytes(rand))
+			}
+
+			if test.sk != "null" {
+				sk, err := schnorr.ParsePrivKeyHexString(
+					test.sk,
+				)
+				require.NoError(t, err)
+
+				opts = append(opts, WithOptionSecretKey(sk))
+			}
+
+			if test.aggPk != "null" {
+				aggPk, err := schnorr.ParseXOnlyPubKeyHexString(
+					test.aggPk,
+				)
+				require.NoError(t, err)
+
+				opts = append(opts, WithOptionAggKey(aggPk))
+			}
+
+			if test.msg != "null" {
+				opts = append(opts, WithOptionMessage(
+					parseHexStr(t, test.msg)),
+				)
+			}
+
+			if test.extraIn != "null" {
+				opts = append(opts, WithOptionExtraIn(
+					parseHexStr(t, test.extraIn)),
+				)
+			}
+
+			nonce, err := NonceGen(pk, opts...)
+			require.NoError(t, err)
+
+			exp, err := hex.DecodeString(test.expected)
+			require.NoError(t, err)
+
+			require.True(t,
+				bytes.Equal(nonce.SecNonce.Bytes(), exp))
+		})
+	}
+}
+
+func parseHexStr(t *testing.T, s string) []byte {
+	b, err := hex.DecodeString(s)
+	require.NoError(t, err)
+
+	return b
+}

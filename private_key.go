@@ -31,7 +31,7 @@ func NewPrivateKey() (*PrivateKey, error) {
 		return nil, err
 	}
 
-	return newPrivateKey(d)
+	return PrivateKeyFromInt(d)
 }
 
 // ParsePrivKeyBytes constructs a new PrivateKey from the given byte slice.
@@ -43,7 +43,7 @@ func ParsePrivKeyBytes(sk []byte) (*PrivateKey, error) {
 	var d big.Int
 	d.SetBytes(sk)
 
-	return newPrivateKey(&d)
+	return PrivateKeyFromInt(&d)
 }
 
 // ParsePrivKeyHexString constructs a new PrivateKey from the given hex string.
@@ -56,8 +56,8 @@ func ParsePrivKeyHexString(s string) (*PrivateKey, error) {
 	return ParsePrivKeyBytes(b)
 }
 
-// newPrivateKey creates a new PrivateKey from the given secret key.
-func newPrivateKey(d *big.Int) (*PrivateKey, error) {
+// PrivateKeyFromInt creates a new PrivateKey from the given secret key.
+func PrivateKeyFromInt(d *big.Int) (*PrivateKey, error) {
 	if d.Sign() <= 0 || d.Cmp(secp256k1.N) > 0 {
 		return nil, fmt.Errorf("invalid private key generated")
 	}
@@ -91,8 +91,8 @@ func (p *PrivateKey) Sign(msg, aux []byte) (*Signature, error) {
 		d.Sub(secp256k1.N, &d)
 	}
 
-	// Let t be the byte-wise xor of bytes(d) and hashBIP0340/aux(a)
-	t := xor(skBytes(&d), TaggedHash(Bip340AuxTag, aux[:]))
+	// Let t be the byte-wise Xor of bytes(d) and hashBIP0340/aux(a)
+	t := Xor(skBytes(&d), TaggedHash(Bip340AuxTag, aux[:]))
 
 	// Let rand = hashBIP0340/nonce(t || bytes(P) || m)
 	pBytes := p.PubKey.XOnlyBytes()
@@ -169,7 +169,7 @@ func skBytes(d *big.Int) [32]byte {
 	return b
 }
 
-func xor(a, b [32]byte) [32]byte {
+func Xor(a, b [32]byte) [32]byte {
 	var c [32]byte
 	for i := range c {
 		c[i] = a[i] ^ b[i]
