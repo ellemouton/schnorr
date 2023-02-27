@@ -90,6 +90,33 @@ func (s *SecNonce) Bytes() []byte {
 	return res
 }
 
+func ParseSecNonce(b []byte) (*SecNonce, error) {
+	if len(b) != 32+32+33 {
+		return nil, fmt.Errorf("invalid sec nonce len")
+	}
+
+	k1, err := schnorr.ParsePrivKeyBytes(b[:32])
+	if err != nil {
+		return nil, err
+	}
+
+	k2, err := schnorr.ParsePrivKeyBytes(b[32:64])
+	if err != nil {
+		return nil, err
+	}
+
+	pk, err := schnorr.ParsePlainPubKey(b[64:])
+	if err != nil {
+		return nil, err
+	}
+
+	return &SecNonce{
+		k1: k1,
+		k2: k2,
+		pk: pk,
+	}, nil
+}
+
 type PubNonce struct {
 	R1, R2 *schnorr.PublicKey
 }

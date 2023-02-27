@@ -150,6 +150,17 @@ func KeyAggCoeffInternal(pks []*schnorr.PublicKey, pk *schnorr.PublicKey,
 	return schnorr.IntFromBytes(schnorr.TaggedHash(KeyAggCoefficientTag, b))
 }
 
+func KeyAggCoeff(pks []*schnorr.PublicKey, pk *schnorr.PublicKey) (*big.Int,
+	error) {
+
+	pk2, err := GetSecondKey(pks)
+	if err != nil {
+		return nil, err
+	}
+
+	return KeyAggCoeffInternal(pks, pk, pk2), nil
+}
+
 func HashKeys(pks []*schnorr.PublicKey) [32]byte {
 	data := make([]byte, len(pks)*schnorr.PlainPubKeyBytesLen)
 	for i, pk := range pks {

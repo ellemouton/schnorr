@@ -20,7 +20,7 @@ const (
 
 // PrivateKey defines a private key required to create a schnorr signature.
 type PrivateKey struct {
-	d      *big.Int
+	D      *big.Int
 	PubKey *PublicKey
 }
 
@@ -63,14 +63,14 @@ func PrivateKeyFromInt(d *big.Int) (*PrivateKey, error) {
 	}
 
 	return &PrivateKey{
-		d:      d,
+		D:      d,
 		PubKey: NewPublicKey(secp256k1.G.Mul(d)),
 	}, nil
 }
 
 // Bytes returns the 32 byte representation of the private key.
 func (p *PrivateKey) Bytes() [PrivKeyBytesLen]byte {
-	return skBytes(p.d)
+	return skBytes(p.D)
 }
 
 // Sign uses the PrivateKey to sign the given message and produce a valid
@@ -81,17 +81,17 @@ func (p *PrivateKey) Sign(msg, aux []byte) (*Signature, error) {
 	}
 
 	// Make a copy of the secret key.
-	// 	Let d' = int(sk)
+	// 	Let D' = int(sk)
 	var d big.Int
-	d.Add(p.d, big.NewInt(0))
+	d.Add(p.D, big.NewInt(0))
 
 	// Negate the secret key if the public key has an odd Y.
-	// 	Let d = d' if has_even_y(P), otherwise let d = n - d'
+	// 	Let D = D' if has_even_y(P), otherwise let D = n - D'
 	if !p.PubKey.HasEvenY() {
 		d.Sub(secp256k1.N, &d)
 	}
 
-	// Let t be the byte-wise Xor of bytes(d) and hashBIP0340/aux(a)
+	// Let t be the byte-wise Xor of bytes(D) and hashBIP0340/aux(a)
 	t := Xor(skBytes(&d), TaggedHash(Bip340AuxTag, aux[:]))
 
 	// Let rand = hashBIP0340/nonce(t || bytes(P) || m)

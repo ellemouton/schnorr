@@ -51,7 +51,7 @@ func TestSign(t *testing.T) {
 	}
 
 	for i, test := range tests {
-		name := fmt.Sprintf("%d", i)
+		name := fmt.Sprintf("%D", i)
 		t.Run(name, func(t *testing.T) {
 			sk, err := ParsePrivKeyHexString(test.sk)
 			require.NoError(t, err)
@@ -146,7 +146,7 @@ func TestVerify(t *testing.T) {
 	}
 
 	for i, test := range tests {
-		name := fmt.Sprintf("%d", i)
+		name := fmt.Sprintf("%D", i)
 		t.Run(name, func(t *testing.T) {
 			pk, err := ParseXOnlyPubKeyHexString(test.pk)
 			if err != nil && !test.valid {
