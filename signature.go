@@ -60,7 +60,7 @@ func (s *Signature) Verify(pk *PublicKey, msg []byte) error {
 		return err
 	}
 
-	e := intFromByte(
+	e := IntFromBytes(
 		TaggedHash(
 			Bip340ChallengeTag, s.R.XOnlyBytes()[:], pkBytes[:],
 			msg,
@@ -104,7 +104,7 @@ func BatchVerify(pks []*PublicKey, msgs [][]byte, sigs []*Signature) error {
 		epAcc = NewInfinityPubKey()
 	)
 	for i, sig := range sigs {
-		e := intFromByte(TaggedHash(
+		e := IntFromBytes(TaggedHash(
 			Bip340ChallengeTag, sig.R.XOnlyBytes()[:],
 			pks[i].XOnlyBytes()[:], msgs[i],
 		))

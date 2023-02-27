@@ -2,8 +2,15 @@ package musig2
 
 import (
 	"bytes"
+	"fmt"
 	"github.com/ellemouton/schnorr"
+	"math/big"
 	"sort"
+)
+
+const (
+	KeyAggListTag        = "KeyAgg list"
+	KeyAggCoefficientTag = "KeyAgg coefficient"
 )
 
 // KeySort implements the Musig2 KeySort algorithm. It sorts the given set of
@@ -39,4 +46,83 @@ func (s sortableKeys) Less(i, j int) bool {
 // NOTE: this is part of the sort.Interface interface.
 func (s sortableKeys) Swap(i, j int) {
 	s[i], s[j] = s[j], s[i]
+}
+
+type KeyGenCtx struct {
+	// Q represents the aggregate and potentially tweaked public key.
+	Q *schnorr.PublicKey
+
+	// TAcc is the accumulated tweak (0 <= tacc < n)
+	TAcc *big.Int
+
+	// GAcc is 1 or -1 mod n
+	GAcc *big.Int
+}
+
+// KeyAgg aggregates the given set of pub keys into a single one as defined
+// by the Musig2 spec.
+func KeyAgg(pks []*schnorr.PublicKey) (*KeyGenCtx, error) {
+	pk2, err := GetSecondKey(pks)
+	if err != nil {
+		return nil, fmt.Errorf("could not get second key: %w", err)
+	}
+
+	Q := schnorr.NewInfinityPubKey()
+	for _, pk := range pks {
+		Q = Q.Add(pk.Mul(KeyAggCoeffInternal(pks, pk, pk2)))
+	}
+
+	if Q.IsInfinity {
+		return nil, fmt.Errorf("final pub key cannot be infinity")
+	}
+
+	return &KeyGenCtx{
+		Q:    Q,
+		TAcc: big.NewInt(0),
+		GAcc: big.NewInt(1),
+	}, nil
+}
+
+// GetSecondKey returns the plain byte encoding of the second unique key in the
+// set. If no second unique key is found then a zero byte array is returned.
+func GetSecondKey(pks []*schnorr.PublicKey) ([]byte, error) {
+	if len(pks) == 0 {
+		return nil, fmt.Errorf("must pass at least one key")
+	}
+
+	for _, pk := range pks {
+		if !pk.Equal(pks[0]) {
+			return pk.PlainBytes(), nil
+		}
+	}
+
+	return bytes.Repeat([]byte{0x0}, 32), nil
+}
+
+func KeyAggCoeffInternal(pks []*schnorr.PublicKey, pk *schnorr.PublicKey,
+	pk2 []byte) *big.Int {
+
+	if bytes.Equal(pk.PlainBytes(), pk2) {
+		return big.NewInt(1)
+	}
+
+	l := HashKeys(pks)
+
+	b := make([]byte, 32+schnorr.PlainPubKeyBytesLen)
+	copy(b[:32], l[:])
+	copy(b[32:], pk.PlainBytes())
+
+	return schnorr.IntFromBytes(schnorr.TaggedHash(KeyAggCoefficientTag, b))
+}
+
+func HashKeys(pks []*schnorr.PublicKey) [32]byte {
+	data := make([]byte, len(pks)*schnorr.PlainPubKeyBytesLen)
+	for i, pk := range pks {
+		offset1 := i * schnorr.PlainPubKeyBytesLen
+		offset2 := offset1 + schnorr.PlainPubKeyBytesLen
+
+		copy(data[offset1:offset2], pk.PlainBytes())
+	}
+
+	return schnorr.TaggedHash(KeyAggListTag, data)
 }

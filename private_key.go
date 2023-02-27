@@ -99,7 +99,7 @@ func (p *PrivateKey) Sign(msg, aux []byte) (*Signature, error) {
 	rand := TaggedHash(Bip340NonceTag, t[:], pBytes[:], msg[:])
 
 	// Let k' = int(rand) mod n
-	k := intFromByte(rand)
+	k := IntFromBytes(rand)
 
 	// Fail if k' = 0.
 	if k.Sign() == 0 {
@@ -115,7 +115,7 @@ func (p *PrivateKey) Sign(msg, aux []byte) (*Signature, error) {
 	}
 
 	// Let e = int(hashBIP0340/challenge(bytes(R) || bytes(P) || m)) mod n
-	e := intFromByte(
+	e := IntFromBytes(
 		TaggedHash(
 			Bip340ChallengeTag, R.XOnlyBytes()[:], pBytes[:], msg,
 		),
@@ -178,7 +178,7 @@ func xor(a, b [32]byte) [32]byte {
 	return c
 }
 
-func intFromByte(b [32]byte) *big.Int {
+func IntFromBytes(b [32]byte) *big.Int {
 	var res big.Int
 	res.SetBytes(b[:])
 	res.Mod(&res, secp256k1.N)
