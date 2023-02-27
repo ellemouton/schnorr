@@ -1,6 +1,7 @@
 package musig2
 
 import (
+	"bytes"
 	"crypto/rand"
 	"encoding/binary"
 	"fmt"
@@ -12,6 +13,8 @@ const (
 	AuxTag   = "MuSig/aux"
 	NonceTag = "MuSig/nonce"
 )
+
+var zeroByteVector = bytes.Repeat([]byte{0x00}, 33)
 
 type NonceGenOption func(opts *nonceGenCfg)
 
@@ -91,10 +94,52 @@ type PubNonce struct {
 	R1, R2 *schnorr.PublicKey
 }
 
+func ParsePubNonce(b []byte) (*PubNonce, error) {
+	if len(b) != 66 {
+		return nil, fmt.Errorf("bad pub nonce len")
+	}
+
+	n1Bytes := b[:33]
+	n2Bytes := b[33:]
+
+	R1 := schnorr.NewInfinityPubKey()
+	R2 := schnorr.NewInfinityPubKey()
+
+	var err error
+	if !bytes.Equal(n1Bytes, zeroByteVector) {
+		R1, err = schnorr.ParsePlainPubKey(n1Bytes)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	if !bytes.Equal(n2Bytes, zeroByteVector) {
+		R2, err = schnorr.ParsePlainPubKey(n2Bytes)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return &PubNonce{
+		R1: R1,
+		R2: R2,
+	}, nil
+}
+
 func (p *PubNonce) Bytes() []byte {
 	res := make([]byte, 66)
-	copy(res[:33], p.R1.PlainBytes())
-	copy(res[33:], p.R2.PlainBytes())
+
+	if p.R1.IsInfinity {
+		copy(res[:33], zeroByteVector)
+	} else {
+		copy(res[:33], p.R1.PlainBytes())
+	}
+
+	if p.R2.IsInfinity {
+		copy(res[33:], zeroByteVector)
+	} else {
+		copy(res[33:], p.R2.PlainBytes())
+	}
 
 	return res
 }
@@ -194,4 +239,26 @@ func makeNonce(i uint8, pk *schnorr.PublicKey, rand, aggPk, mPrefixed,
 	ii := schnorr.IntFromBytes(hash)
 
 	return schnorr.PrivateKeyFromInt(ii)
+}
+
+func NonceAgg(pNonces []*PubNonce) *PubNonce {
+	nonces := []*schnorr.PublicKey{
+		schnorr.NewInfinityPubKey(), schnorr.NewInfinityPubKey(),
+	}
+
+	for j, _ := range nonces {
+		for _, pn := range pNonces {
+			nn := pn.R1
+			if j == 1 {
+				nn = pn.R2
+			}
+
+			nonces[j] = nonces[j].Add(nn)
+		}
+	}
+
+	return &PubNonce{
+		R1: nonces[0],
+		R2: nonces[1],
+	}
 }

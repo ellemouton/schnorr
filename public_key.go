@@ -70,6 +70,10 @@ func ParsePlainPubKey(b []byte) (*PublicKey, error) {
 			"plain pub key")
 	}
 
+	if b[0] != 0x02 && b[0] != 0x03 {
+		return nil, fmt.Errorf("invalid pub key tag")
+	}
+
 	var xInt big.Int
 	xInt.SetBytes(b[1:])
 
