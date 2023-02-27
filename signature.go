@@ -31,7 +31,7 @@ func NewSignatureFromBytes(b []byte) (*Signature, error) {
 		return nil, fmt.Errorf("wrong sig size")
 	}
 
-	R, err := NewPubKeyFromBytes(b[:32])
+	R, err := ParseXOnlyPubKey(b[:32])
 	if err != nil {
 		return nil, err
 	}
@@ -45,8 +45,7 @@ func NewSignatureFromBytes(b []byte) (*Signature, error) {
 // Bytes returns the byte representation of the signature.
 func (s *Signature) Bytes() [SignatureSize]byte {
 	var sig [SignatureSize]byte
-	rBytes := s.R.Bytes()
-	copy(sig[:32], rBytes[:])
+	copy(sig[:32], s.R.XOnlyBytes()[:])
 	copy(sig[32:], s.S.Bytes())
 
 	return sig
@@ -55,15 +54,17 @@ func (s *Signature) Bytes() [SignatureSize]byte {
 // Verify checks if the signature is a valid schnorr signature for the given
 // public key and message.
 func (s *Signature) Verify(pk *PublicKey, msg []byte) error {
-	pkBytes := pk.Bytes()
-	P, err := NewPubKeyFromBytes(pkBytes[:])
+	pkBytes := pk.XOnlyBytes()
+	P, err := ParseXOnlyPubKey(pkBytes[:])
 	if err != nil {
 		return err
 	}
 
-	rBytes := s.R.Bytes()
 	e := intFromByte(
-		TaggedHash(Bip340ChallengeTag, rBytes[:], pkBytes[:], msg),
+		TaggedHash(
+			Bip340ChallengeTag, s.R.XOnlyBytes()[:], pkBytes[:],
+			msg,
+		),
 	)
 
 	one := NewPublicKey(secp256k1.G.Mul(s.S))
@@ -103,10 +104,9 @@ func BatchVerify(pks []*PublicKey, msgs [][]byte, sigs []*Signature) error {
 		epAcc = NewInfinityPubKey()
 	)
 	for i, sig := range sigs {
-		rBytes := sig.R.Bytes()
-		pBytes := pks[i].Bytes()
 		e := intFromByte(TaggedHash(
-			Bip340ChallengeTag, rBytes[:], pBytes[:], msgs[i],
+			Bip340ChallengeTag, sig.R.XOnlyBytes()[:],
+			pks[i].XOnlyBytes()[:], msgs[i],
 		))
 
 		epAcc = epAcc.Add(pks[i].Mul(e))

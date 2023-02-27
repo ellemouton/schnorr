@@ -56,7 +56,7 @@ func TestSign(t *testing.T) {
 			sk, err := ParsePrivKeyHexString(test.sk)
 			require.NoError(t, err)
 
-			pk, err := NewPubKeyFromHexString(test.pk)
+			pk, err := ParseXOnlyPubKeyHexString(test.pk)
 			require.NoError(t, err)
 
 			require.True(t, sk.PubKey.X.Equal(pk.X))
@@ -148,7 +148,7 @@ func TestVerify(t *testing.T) {
 	for i, test := range tests {
 		name := fmt.Sprintf("%d", i)
 		t.Run(name, func(t *testing.T) {
-			pk, err := NewPubKeyFromHexString(test.pk)
+			pk, err := ParseXOnlyPubKeyHexString(test.pk)
 			if err != nil && !test.valid {
 				return
 			}
@@ -206,7 +206,7 @@ func TestBatchVerify(t *testing.T) {
 	)
 
 	for _, item := range sigSet {
-		pk, err := NewPubKeyFromHexString(item.pk)
+		pk, err := ParseXOnlyPubKeyHexString(item.pk)
 		require.NoError(t, err)
 
 		msg := readHexString(t, item.msg)

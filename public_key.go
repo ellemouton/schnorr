@@ -7,7 +7,10 @@ import (
 	"math/big"
 )
 
-const PubKeyBytesLen = 32
+const (
+	XOnlyPubKeyBytesLen = 32
+	PlainPubKeyBytesLen = 33
+)
 
 // PublicKey is a public key.
 type PublicKey struct {
@@ -25,26 +28,125 @@ func NewInfinityPubKey() *PublicKey {
 	return &PublicKey{secp256k1.NewInfinityPoint()}
 }
 
-// NewPubKeyFromHexString constructs a new PublicKey from the passed hex string.
-func NewPubKeyFromHexString(s string) (*PublicKey, error) {
+// ParseXOnlyPubKeyHexString constructs a new PublicKey from the passed hex
+// string.
+func ParseXOnlyPubKeyHexString(s string) (*PublicKey, error) {
 	b, err := hex.DecodeString(s)
 	if err != nil {
 		return nil, err
 	}
 
-	return NewPubKeyFromBytes(b)
+	return ParseXOnlyPubKey(b)
 }
 
-// NewPubKeyFromBytes constructs a new PublicKey from the passed bytes slice.
-func NewPubKeyFromBytes(b []byte) (*PublicKey, error) {
-	if len(b) != PubKeyBytesLen {
-		return nil, fmt.Errorf("incorrect number of bytes for pub key")
+// ParseXOnlyPubKey constructs a new PublicKey from the passed bytes slice.
+func ParseXOnlyPubKey(b []byte) (*PublicKey, error) {
+	if len(b) != XOnlyPubKeyBytesLen {
+		return nil, fmt.Errorf("incorrect number of bytes for an " +
+			"x-only pub key")
 	}
 
 	var xInt big.Int
 	xInt.SetBytes(b)
 
-	x, err := secp256k1.NewFieldElement(&xInt)
+	return LiftX(&xInt)
+}
+
+// ParsePlainPubKeyHexString constructs a new PublicKey from the passed hex
+// string.
+func ParsePlainPubKeyHexString(s string) (*PublicKey, error) {
+	b, err := hex.DecodeString(s)
+	if err != nil {
+		return nil, err
+	}
+
+	return ParsePlainPubKey(b)
+}
+
+// ParsePlainPubKey constructs a new PublicKey from the passed byte slice.
+func ParsePlainPubKey(b []byte) (*PublicKey, error) {
+	if len(b) != PlainPubKeyBytesLen {
+		return nil, fmt.Errorf("incorrect number of bytes for a " +
+			"plain pub key")
+	}
+
+	var xInt big.Int
+	xInt.SetBytes(b[1:])
+
+	p, err := LiftX(&xInt)
+	if err != nil {
+		return nil, err
+	}
+
+	// Change the Y coordinate depending on the parity byte.
+	if b[0] == 0x02 {
+		return p, nil
+	}
+
+	p.Y.Num.Sub(secp256k1.P, p.Y.Num)
+
+	return p, nil
+}
+
+// XOnlyBytes returns the 32 byte representation of the PublicKey.
+func (p *PublicKey) XOnlyBytes() []byte {
+	var b [XOnlyPubKeyBytesLen]byte
+	p.X.Num.FillBytes(b[:])
+
+	return b[:]
+}
+
+// PlainBytes returns the 33 byte compressed representation of the PublicKey.
+func (p *PublicKey) PlainBytes() []byte {
+	var b [PlainPubKeyBytesLen]byte
+	p.X.Num.FillBytes(b[1:])
+
+	if p.HasEvenY() {
+		b[0] = 0x02
+	} else {
+		b[0] = 0x03
+	}
+
+	return b[:]
+}
+
+// HasEvenY returns true if the public key'S Y coordinate is even.
+func (p *PublicKey) HasEvenY() bool {
+	if p.IsInfinity {
+		return true
+	}
+
+	return p.Y.Num.Bit(0) == 0
+}
+
+// Copy returns a new copy of the PublicKey.
+func (p *PublicKey) Copy() *PublicKey {
+	return &PublicKey{p.Point.Copy()}
+}
+
+// Equal returns true if the two PublicKeys are the same.
+func (p *PublicKey) Equal(o *PublicKey) bool {
+	if p.IsInfinity || o.IsInfinity {
+		return p.IsInfinity && o.IsInfinity
+	}
+
+	return p.X.Equal(o.X)
+}
+
+// Add adds the two PublicKey points and returns the result.
+func (p *PublicKey) Add(o *PublicKey) *PublicKey {
+	return &PublicKey{p.Point.Add(o.Point)}
+}
+
+// Mul multiplies the Public key with the given constant and returns the result.
+func (p *PublicKey) Mul(c *big.Int) *PublicKey {
+	return &PublicKey{p.Point.Mul(c)}
+}
+
+// LiftX calculates the PublicKey associated with the given x coordinate that
+// has the even y coordinate.
+func LiftX(xInt *big.Int) (*PublicKey, error) {
+	x, err := secp256k1.NewFieldElement(xInt)
 	if err != nil {
 		return nil, err
 	}
@@ -79,51 +181,10 @@ func NewPubKeyFromBytes(b []byte) (*PublicKey, error) {
 		y.Num.Sub(secp256k1.P, y.Num)
 	}
 
-	p, err := secp256k1.NewPoint(x, y)
+	point, err := secp256k1.NewPoint(x, y)
 	if err != nil {
 		return nil, err
 	}
 
-	return NewPublicKey(p), nil
-}
-
-// Bytes returns the 32 byte representation of the Public key.
-func (p *PublicKey) Bytes() [PubKeyBytesLen]byte {
-	var b [PubKeyBytesLen]byte
-	p.X.Num.FillBytes(b[:])
-
-	return b
-}
-
-// HasEvenY returns true if the public key'S Y coordinate is even.
-func (p *PublicKey) HasEvenY() bool {
-	if p.IsInfinity {
-		return true
-	}
-
-	return p.Y.Num.Bit(0) == 0
-}
-
-// Copy returns a new copy of the PublicKey.
-func (p *PublicKey) Copy() *PublicKey {
-	return &PublicKey{p.Point.Copy()}
-}
-
-// Equal returns true if the two PublicKeys are the same.
-func (p *PublicKey) Equal(o *PublicKey) bool {
-	if p.IsInfinity || o.IsInfinity {
-		return p.IsInfinity && o.IsInfinity
-	}
-
-	return p.X.Equal(o.X)
-}
-
-// Add adds the two PublicKey points and returns the result.
-func (p *PublicKey) Add(o *PublicKey) *PublicKey {
-	return &PublicKey{p.Point.Add(o.Point)}
-}
-
-// Mul multiplies the Public key with the given constant and returns the result.
-func (p *PublicKey) Mul(c *big.Int) *PublicKey {
-	return &PublicKey{p.Point.Mul(c)}
+	return NewPublicKey(point), nil
 }

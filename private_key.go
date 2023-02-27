@@ -95,7 +95,7 @@ func (p *PrivateKey) Sign(msg, aux []byte) (*Signature, error) {
 	t := xor(skBytes(&d), TaggedHash(Bip340AuxTag, aux[:]))
 
 	// Let rand = hashBIP0340/nonce(t || bytes(P) || m)
-	pBytes := p.PubKey.Bytes()
+	pBytes := p.PubKey.XOnlyBytes()
 	rand := TaggedHash(Bip340NonceTag, t[:], pBytes[:], msg[:])
 
 	// Let k' = int(rand) mod n
@@ -115,9 +115,10 @@ func (p *PrivateKey) Sign(msg, aux []byte) (*Signature, error) {
 	}
 
 	// Let e = int(hashBIP0340/challenge(bytes(R) || bytes(P) || m)) mod n
-	rBytes := R.Bytes()
 	e := intFromByte(
-		TaggedHash(Bip340ChallengeTag, rBytes[:], pBytes[:], msg),
+		TaggedHash(
+			Bip340ChallengeTag, R.XOnlyBytes()[:], pBytes[:], msg,
+		),
 	)
 
 	s := k.Mod(k.Add(k, e.Mul(e, &d)), secp256k1.N)
