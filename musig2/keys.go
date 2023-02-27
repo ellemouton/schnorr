@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"github.com/ellemouton/schnorr"
+	"github.com/ellemouton/schnorr/secp256k1"
 	"math/big"
 	"sort"
 )
@@ -57,6 +58,40 @@ type KeyGenCtx struct {
 
 	// GAcc is 1 or -1 mod n
 	GAcc *big.Int
+}
+
+// ApplyTweak implements the musig2 ApplyTweak algorithm. The given tweak is
+// applied to the given context in the specified mode and the resulting
+// KeyGenCtx is returned
+func ApplyTweak(ctx *KeyGenCtx, tweak []byte, isXOnlyTweak bool) (*KeyGenCtx,
+	error) {
+
+	if len(tweak) != 32 {
+		return nil, fmt.Errorf("tweak must be 32 bytes")
+	}
+
+	var newCtx KeyGenCtx
+	if isXOnlyTweak && !ctx.Q.HasEvenY() {
+		newCtx.GAcc.Mod(big.NewInt(-1), secp256k1.N)
+	} else {
+		newCtx.GAcc = big.NewInt(1)
+	}
+
+	var t big.Int
+	t.SetBytes(tweak[:])
+	if t.Cmp(secp256k1.N) >= 0 {
+		return nil, fmt.Errorf("tweak out of range")
+	}
+
+	newCtx.Q = ctx.Q.Add(schnorr.NewPublicKey(secp256k1.G.Mul(&t)))
+	if newCtx.Q.IsInfinity {
+		return nil, fmt.Errorf("point at infinity")
+	}
+
+	newCtx.TAcc = new(big.Int).Add(&t, new(big.Int).Mul(ctx.GAcc, ctx.TAcc))
+	newCtx.TAcc.Mod(newCtx.TAcc, secp256k1.N)
+
+	return &newCtx, nil
 }
 
 // KeyAgg aggregates the given set of pub keys into a single one as defined

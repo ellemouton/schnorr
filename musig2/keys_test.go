@@ -1,6 +1,7 @@
 package musig2
 
 import (
+	"encoding/hex"
 	"github.com/ellemouton/schnorr"
 	"github.com/stretchr/testify/require"
 	"testing"
@@ -49,10 +50,17 @@ func TestKeyAgg(t *testing.T) {
 		"03935F972DA013F80AE011890FA89B67A27B7BE6CCB24D3274D18B2D4067F261A9",
 	}
 
+	tweaks := []string{
+		"FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141",
+		"252E4BD67410A76CDF933D30EAA1608214037F1B105A013ECCD3C5C184A6110B",
+	}
+
 	tests := []struct {
-		keyIndices  []int
-		expectErr   bool
-		expectedAgg string
+		keyIndices   []int
+		tweakIndices []int
+		isXOnlyT     bool
+		expectErr    bool
+		expectedAgg  string
 	}{
 		{
 			keyIndices:  []int{0, 1, 2},
@@ -82,6 +90,18 @@ func TestKeyAgg(t *testing.T) {
 			keyIndices: []int{0, 5},
 			expectErr:  true,
 		},
+		{
+			keyIndices:   []int{0, 1},
+			tweakIndices: []int{0},
+			isXOnlyT:     true,
+			expectErr:    true,
+		},
+		{
+			keyIndices:   []int{6},
+			tweakIndices: []int{1},
+			isXOnlyT:     false,
+			expectErr:    true,
+		},
 	}
 
 	for _, test := range tests {
@@ -102,11 +122,33 @@ func TestKeyAgg(t *testing.T) {
 				inputs[i] = pub
 			}
 
+			inputTweakStrs := make([]string, len(test.tweakIndices))
+			for i, index := range test.tweakIndices {
+				inputTweakStrs[i] = tweaks[index]
+			}
+
+			ts := make([][]byte, len(inputTweakStrs))
+			for i, s := range inputTweakStrs {
+
+				tweak, err := hex.DecodeString(s)
+				require.NoError(t, err)
+
+				ts[i] = tweak
+			}
+
 			aggKeyCtx, err := KeyAgg(inputs)
 			if err != nil && test.expectErr {
 				return
 			}
 			require.NoError(t, err)
+
+			if len(ts) != 0 {
+				aggKeyCtx, err = ApplyTweak(aggKeyCtx, ts[0], test.isXOnlyT)
+				if err != nil && test.expectErr {
+					return
+				}
+				require.NoError(t, err)
+			}
 
 			expectedAgg, err := schnorr.ParseXOnlyPubKeyHexString(
 				test.expectedAgg,
