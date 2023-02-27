@@ -49,8 +49,9 @@ func TestKeyAgg(t *testing.T) {
 		"03935F972DA013F80AE011890FA89B67A27B7BE6CCB24D3274D18B2D4067F261A9",
 	}
 
-	validTests := []struct {
+	tests := []struct {
 		keyIndices  []int
+		expectErr   bool
 		expectedAgg string
 	}{
 		{
@@ -69,25 +70,54 @@ func TestKeyAgg(t *testing.T) {
 			keyIndices:  []int{0, 0, 1, 1},
 			expectedAgg: "69BC22BFA5D106306E48A20679DE1D7389386124D07571D0D872686028C26A3E",
 		},
+		{
+			keyIndices: []int{0, 3},
+			expectErr:  true,
+		},
+		{
+			keyIndices: []int{0, 4},
+			expectErr:  true,
+		},
+		{
+			keyIndices: []int{0, 5},
+			expectErr:  true,
+		},
 	}
 
-	for _, test := range validTests {
-		inputKeyStrs := make([]string, len(test.keyIndices))
-		for i, index := range test.keyIndices {
-			inputKeyStrs[i] = pubkeys[index]
-		}
+	for _, test := range tests {
+		t.Run("", func(t *testing.T) {
+			inputKeyStrs := make([]string, len(test.keyIndices))
+			for i, index := range test.keyIndices {
+				inputKeyStrs[i] = pubkeys[index]
+			}
 
-		inputs := convertStrsToPubKeys(t, inputKeyStrs)
+			inputs := make([]*schnorr.PublicKey, len(inputKeyStrs))
+			for i, s := range inputKeyStrs {
+				pub, err := schnorr.ParsePlainPubKeyHexString(s)
+				if err != nil && test.expectErr {
+					return
+				}
+				require.NoError(t, err)
 
-		aggKeyCtx, err := KeyAgg(inputs)
-		require.NoError(t, err)
+				inputs[i] = pub
+			}
 
-		expectedAgg, err := schnorr.ParseXOnlyPubKeyHexString(
-			test.expectedAgg,
-		)
-		require.NoError(t, err)
+			aggKeyCtx, err := KeyAgg(inputs)
+			if err != nil && test.expectErr {
+				return
+			}
+			require.NoError(t, err)
 
-		require.True(t, aggKeyCtx.Q.Equal(expectedAgg))
+			expectedAgg, err := schnorr.ParseXOnlyPubKeyHexString(
+				test.expectedAgg,
+			)
+			if err != nil && test.expectErr {
+				return
+			}
+			require.NoError(t, err)
+
+			require.True(t, aggKeyCtx.Q.Equal(expectedAgg))
+		})
 	}
 }
 
