@@ -70,11 +70,9 @@ func ApplyTweak(ctx *KeyGenCtx, tweak []byte, isXOnlyTweak bool) (*KeyGenCtx,
 		return nil, fmt.Errorf("tweak must be 32 bytes")
 	}
 
-	var newCtx KeyGenCtx
+	gAcc := big.NewInt(1)
 	if isXOnlyTweak && !ctx.Q.HasEvenY() {
-		newCtx.GAcc.Mod(big.NewInt(-1), secp256k1.N)
-	} else {
-		newCtx.GAcc = big.NewInt(1)
+		gAcc.Mod(big.NewInt(-1), secp256k1.N)
 	}
 
 	var t big.Int
@@ -83,15 +81,21 @@ func ApplyTweak(ctx *KeyGenCtx, tweak []byte, isXOnlyTweak bool) (*KeyGenCtx,
 		return nil, fmt.Errorf("tweak out of range")
 	}
 
-	newCtx.Q = ctx.Q.Add(schnorr.NewPublicKey(secp256k1.G.Mul(&t)))
-	if newCtx.Q.IsInfinity {
+	// Q_i = g*Q + t*G
+	Q := ctx.Q.Mul(gAcc)
+	Q = Q.Add(schnorr.NewPublicKey(secp256k1.G.Mul(&t)))
+	if Q.IsInfinity {
 		return nil, fmt.Errorf("point at infinity")
 	}
 
-	newCtx.TAcc = new(big.Int).Add(&t, new(big.Int).Mul(ctx.GAcc, ctx.TAcc))
-	newCtx.TAcc.Mod(newCtx.TAcc, secp256k1.N)
+	tAcc := new(big.Int).Add(&t, new(big.Int).Mul(gAcc, ctx.TAcc))
+	tAcc.Mod(tAcc, secp256k1.N)
 
-	return &newCtx, nil
+	return &KeyGenCtx{
+		Q:    Q,
+		TAcc: tAcc,
+		GAcc: gAcc,
+	}, nil
 }
 
 // KeyAgg aggregates the given set of pub keys into a single one as defined

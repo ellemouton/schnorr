@@ -71,3 +71,17 @@ type Tweak struct {
 	T     [32]byte
 	Xonly bool
 }
+
+func NewTweak(b []byte, xonly bool) (*Tweak, error) {
+	if len(b) != 32 {
+		return nil, fmt.Errorf("tweak must be 32 bytes")
+	}
+
+	var t [32]byte
+	copy(t[:], b)
+
+	return &Tweak{
+		T:     t,
+		Xonly: xonly,
+	}, nil
+}

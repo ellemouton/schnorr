@@ -7,7 +7,31 @@ import (
 	"math/big"
 )
 
-type PartialSig [32]byte
+type PartialSig struct {
+	s *big.Int
+}
+
+func (p *PartialSig) Bytes() []byte {
+	var b [32]byte
+	p.s.FillBytes(b[:])
+
+	return b[:]
+}
+
+func ParsePartialSig(b []byte) (*PartialSig, error) {
+	if len(b) != 32 {
+		return nil, fmt.Errorf("wrong len for partial sig")
+	}
+
+	var s big.Int
+	s.SetBytes(b)
+
+	if s.Cmp(secp256k1.N) >= 0 {
+		return nil, fmt.Errorf("partial sig out of order bounds")
+	}
+
+	return &PartialSig{s: &s}, nil
+}
 
 func Sign(sn *SecNonce, sk *schnorr.PrivateKey, ctx *SessionContext) (
 	*PartialSig, error) {
@@ -65,10 +89,7 @@ func Sign(sn *SecNonce, sk *schnorr.PrivateKey, ctx *SessionContext) (
 	s.Add(s, ee)
 	s.Mod(s, secp256k1.N)
 
-	psig := new(PartialSig)
-	copy(psig[:], s.Bytes())
-
-	return psig, nil
+	return &PartialSig{s: s}, nil
 }
 
 func PartialSigVerify(psig *PartialSig, pns []*PubNonce,
@@ -97,10 +118,7 @@ func PartialSigVerifyInternal(psig *PartialSig, pubNonce *PubNonce,
 		return err
 	}
 
-	var s big.Int
-	s.SetBytes(psig[:])
-
-	if s.Cmp(secp256k1.N) >= 0 {
+	if psig.s.Cmp(secp256k1.N) >= 0 {
 		return fmt.Errorf("psig out of bounds")
 	}
 
@@ -122,7 +140,7 @@ func PartialSigVerifyInternal(psig *PartialSig, pubNonce *PubNonce,
 	g.Mul(g, keyGenCtx.GAcc)
 	g.Mod(g, secp256k1.N)
 
-	S := secp256k1.G.Mul(&s)
+	S := secp256k1.G.Mul(psig.s)
 
 	pk = pk.Mul(g).Mul(e).Mul(a)
 	pk = pk.Add(Re)
@@ -132,4 +150,37 @@ func PartialSigVerifyInternal(psig *PartialSig, pubNonce *PubNonce,
 	}
 
 	return nil
+}
+
+func PartialSigAgg(psigs []*PartialSig, ctx *SessionContext) (
+	*schnorr.Signature, error) {
+
+	s := big.NewInt(0)
+
+	for _, psig := range psigs {
+		if psig.s.Cmp(secp256k1.N) >= 0 {
+			return nil, fmt.Errorf("partial sig out of range")
+		}
+
+		s.Add(s, psig.s)
+		s.Mod(s, secp256k1.N)
+	}
+
+	keyGenCtx, _, R, e, err := GetSessionValues(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	g := big.NewInt(1)
+	if !keyGenCtx.Q.HasEvenY() {
+		g.Mod(big.NewInt(-1), secp256k1.N)
+	}
+
+	c := new(big.Int).Mul(e, g)
+	c.Mul(c, keyGenCtx.TAcc)
+
+	s.Add(s, c)
+	s.Mod(s, secp256k1.N)
+
+	return schnorr.NewSignature(R, s)
 }
