@@ -70,3 +70,66 @@ func Sign(sn *SecNonce, sk *schnorr.PrivateKey, ctx *SessionContext) (
 
 	return psig, nil
 }
+
+func PartialSigVerify(psig *PartialSig, pns []*PubNonce,
+	pks []*schnorr.PublicKey, tweaks []*Tweak, msg []byte, i int) error {
+
+	sessionCtx := &SessionContext{
+		AggPubNonce: NonceAgg(pns),
+		PubKeys:     pks,
+		Msg:         msg,
+		Tweaks:      tweaks,
+	}
+
+	err := PartialSigVerifyInternal(psig, pns[i], pks[i], sessionCtx)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func PartialSigVerifyInternal(psig *PartialSig, pubNonce *PubNonce,
+	pk *schnorr.PublicKey, sessCtx *SessionContext) error {
+
+	keyGenCtx, b, R, e, err := GetSessionValues(sessCtx)
+	if err != nil {
+		return err
+	}
+
+	var s big.Int
+	s.SetBytes(psig[:])
+
+	if s.Cmp(secp256k1.N) >= 0 {
+		return fmt.Errorf("psig out of bounds")
+	}
+
+	Re := pubNonce.R1.Add(pubNonce.R2.Mul(b))
+	if !R.HasEvenY() {
+		Re = Re.Mul(big.NewInt(-1))
+	}
+
+	a, err := GetSessionKeyAggCoeff(sessCtx, pk)
+	if err != nil {
+		return err
+	}
+
+	g := big.NewInt(1)
+	if !keyGenCtx.Q.HasEvenY() {
+		g.Mod(big.NewInt(-1), secp256k1.N)
+	}
+
+	g.Mul(g, keyGenCtx.GAcc)
+	g.Mod(g, secp256k1.N)
+
+	S := secp256k1.G.Mul(&s)
+
+	pk = pk.Mul(g).Mul(e).Mul(a)
+	pk = pk.Add(Re)
+
+	if !S.Equal(pk.Point) {
+		return fmt.Errorf("fail")
+	}
+
+	return nil
+}
