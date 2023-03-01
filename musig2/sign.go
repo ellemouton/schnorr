@@ -206,13 +206,10 @@ func (ps *PartialSig) VerifyInternal(ctx *SessionContext, pubNonce *PubNonce,
 func (ctx *SessionContext) PartialSigAgg(psigs []*PartialSig) (
 	*schnorr.Signature, error) {
 
+	// Add all the sigs together.
+	// s = s1+s2+....su
 	s := big.NewInt(0)
-
 	for _, psig := range psigs {
-		if psig.S.Cmp(secp256k1.N) >= 0 {
-			return nil, fmt.Errorf("partial sig out of range")
-		}
-
 		s.Add(s, psig.S)
 		s.Mod(s, secp256k1.N)
 	}
@@ -222,6 +219,8 @@ func (ctx *SessionContext) PartialSigAgg(psigs []*PartialSig) (
 		return nil, err
 	}
 
+	// Finally, we add the tweak to the signature.
+	// 	s = (sagg + e*g*tacc) %n
 	g := big.NewInt(1)
 	if !signCtx.Q.HasEvenY() {
 		g.Mod(big.NewInt(-1), secp256k1.N)
@@ -233,5 +232,15 @@ func (ctx *SessionContext) PartialSigAgg(psigs []*PartialSig) (
 	s.Add(s, c)
 	s.Mod(s, secp256k1.N)
 
-	return schnorr.NewSignature(signCtx.R, s)
+	sig, err := schnorr.NewSignature(signCtx.R, s)
+	if err != nil {
+		return nil, err
+	}
+
+	err = sig.Verify(signCtx.Q, ctx.Msg)
+	if err != nil {
+		return nil, err
+	}
+
+	return sig, nil
 }
