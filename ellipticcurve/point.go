@@ -2,12 +2,21 @@ package ellipticcurve
 
 import (
 	"errors"
-	"fmt"
 	"github.com/ellemouton/schnorr/finitefield"
 	"math/big"
 )
 
-var ErrPointsNotOnSameCurve = errors.New("points are not on the same curve")
+var (
+	// ErrPointsNotOnSameCurve is returned when an operation is attempted
+	// on two points that are not on the same curve.
+	ErrPointsNotOnSameCurve = errors.New("points are not on the same curve")
+
+	// ErrPointNotOnCurve is returned when a given x and y coordinate are
+	// not on the given target curve.
+	ErrPointNotOnCurve = errors.New("points not on curve")
+
+	one = big.NewInt(1)
+)
 
 // Point is a point on a Curve.
 type Point struct {
@@ -24,7 +33,7 @@ type Point struct {
 // NewPoint constructs a new Point.
 func NewPoint(x, y *finitefield.Element, curve *Curve) (*Point, error) {
 	if !curve.Contains(x, y) {
-		return nil, fmt.Errorf("points not on curve")
+		return nil, ErrPointNotOnCurve
 	}
 
 	return &Point{
@@ -191,6 +200,9 @@ func (p *Point) Add(o *Point) (*Point, error) {
 }
 
 // Mul does scalar multiplication on the point.
+//
+// NOTE: this is vulnerable to the side channel leakage attack described in
+//  https://link.springer.com/content/pdf/10.1007/978-3-540-28632-5_14.pdf.
 func (p *Point) Mul(c *big.Int) (*Point, error) {
 	var coef big.Int
 	coef.Set(c)
@@ -200,8 +212,7 @@ func (p *Point) Mul(c *big.Int) (*Point, error) {
 
 	var err error
 	for coef.Sign() > 0 {
-		z := &big.Int{}
-		if z.And(&coef, big.NewInt(1)).Cmp(big.NewInt(1)) == 0 {
+		if new(big.Int).And(&coef, one).Cmp(one) == 0 {
 			result, err = result.Add(current)
 			if err != nil {
 				return nil, err

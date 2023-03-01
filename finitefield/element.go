@@ -20,12 +20,12 @@ var (
 // a power of a prime.
 type Element struct {
 	// Num is the Element's number in its finite field. This number must be
-	// more than 0 and less than p.
+	// more than 0 and less than P.
 	Num *big.Int
 
-	// p is the order of the finite field in which the Element's Num is
+	// P is the order of the finite field in which the Element's Num is
 	// defined.
-	p *big.Int
+	P *big.Int
 }
 
 // NewElement constructs a new Element.
@@ -41,19 +41,19 @@ func NewElement(n, p *big.Int) (*Element, error) {
 
 	return &Element{
 		Num: n,
-		p:   p,
+		P:   p,
 	}, nil
 }
 
 // String returns a string representation of Element.
 func (e *Element) String() string {
-	return fmt.Sprintf("Element_%s(%s)", e.p, e.Num)
+	return fmt.Sprintf("Element_%s(%s)", e.P, e.Num)
 }
 
 // Equal returns true if the passed Element is equivalent to this Element.
 func (e *Element) Equal(o *Element) bool {
 	// Elements in different finite fields are not equal.
-	if e.p.Cmp(o.p) != 0 {
+	if e.P.Cmp(o.P) != 0 {
 		return false
 	}
 
@@ -62,64 +62,64 @@ func (e *Element) Equal(o *Element) bool {
 
 // Add adds two Elements in the same finite field together.
 func (e *Element) Add(o *Element) (*Element, error) {
-	if e.p.Cmp(o.p) != 0 {
+	if e.P.Cmp(o.P) != 0 {
 		return nil, ErrElementsOfDifferentFields
 	}
 
 	var res big.Int
 	res.Add(e.Num, o.Num)
-	res.Mod(&res, e.p)
+	res.Mod(&res, e.P)
 
 	return &Element{
 		Num: &res,
-		p:   e.p,
+		P:   e.P,
 	}, nil
 }
 
 // Sub subtracts the given Element from this Element.
 func (e *Element) Sub(o *Element) (*Element, error) {
-	if e.p.Cmp(o.p) != 0 {
+	if e.P.Cmp(o.P) != 0 {
 		return nil, ErrElementsOfDifferentFields
 	}
 
 	var res big.Int
 	res.Sub(e.Num, o.Num)
-	res.Mod(&res, e.p)
+	res.Mod(&res, e.P)
 
 	if res.Sign() < 0 {
-		res.Add(&res, e.p)
+		res.Add(&res, e.P)
 	}
 
 	return &Element{
 		Num: &res,
-		p:   e.p,
+		P:   e.P,
 	}, nil
 }
 
 // Mul multiplies the two Elements together.
 func (e *Element) Mul(o *Element) (*Element, error) {
-	if e.p.Cmp(o.p) != 0 {
+	if e.P.Cmp(o.P) != 0 {
 		return nil, ErrElementsOfDifferentFields
 	}
 
 	var res big.Int
 	res.Mul(e.Num, o.Num)
-	res.Mod(&res, e.p)
+	res.Mod(&res, e.P)
 
 	if res.Sign() < 0 {
-		res.Add(&res, e.p)
+		res.Add(&res, e.P)
 	}
 
 	return &Element{
 		Num: &res,
-		p:   e.p,
+		P:   e.P,
 	}, nil
 }
 
 // Pow defines exponentiation on the Element.
 func (e *Element) Pow(exp *big.Int) *Element {
 	var p big.Int
-	p.Sub(e.p, one)
+	p.Sub(e.P, one)
 
 	var n big.Int
 	n.Mod(exp, &p)
@@ -129,27 +129,27 @@ func (e *Element) Pow(exp *big.Int) *Element {
 	}
 
 	var res big.Int
-	res.Exp(e.Num, &n, e.p)
+	res.Exp(e.Num, &n, e.P)
 
 	if res.Sign() < 0 {
-		res.Add(&res, e.p)
+		res.Add(&res, e.P)
 	}
 
 	return &Element{
 		Num: &res,
-		p:   e.p,
+		P:   e.P,
 	}
 }
 
 // Div divides this Element by the given Element and returns the resulting
 // Element.
 func (e *Element) Div(o *Element) (*Element, error) {
-	if e.p.Cmp(o.p) != 0 {
+	if e.P.Cmp(o.P) != 0 {
 		return nil, ErrElementsOfDifferentFields
 	}
 
 	var exp big.Int
-	exp.Sub(e.p, two)
+	exp.Sub(e.P, two)
 
 	n2, err := e.Mul(o.Pow(&exp))
 	if err != nil {

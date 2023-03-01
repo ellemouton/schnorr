@@ -70,7 +70,7 @@ func TestElementAdd(t *testing.T) {
 
 	f3, err := f1.Add(f2)
 	require.NoError(t, err)
-	require.Equal(t, big.NewInt(19), f3.p)
+	require.Equal(t, big.NewInt(19), f3.P)
 	require.Equal(t, big.NewInt(8), f3.Num)
 
 	f4, err := NewElement(big.NewInt(16), big.NewInt(19))
@@ -78,7 +78,7 @@ func TestElementAdd(t *testing.T) {
 
 	f5, err := f4.Add(f2)
 	require.NoError(t, err)
-	require.Equal(t, big.NewInt(19), f5.p)
+	require.Equal(t, big.NewInt(19), f5.P)
 	require.Equal(t, big.NewInt(2), f5.Num)
 
 	f6, err := NewElement(big.NewInt(3), big.NewInt(11))
@@ -98,12 +98,12 @@ func TestElementSub(t *testing.T) {
 
 	f3, err := f1.Sub(f2)
 	require.NoError(t, err)
-	require.Equal(t, big.NewInt(19), f3.p)
+	require.Equal(t, big.NewInt(19), f3.P)
 	require.Equal(t, big.NewInt(17), f3.Num)
 
 	f4, err := f2.Sub(f1)
 	require.NoError(t, err)
-	require.Equal(t, big.NewInt(19), f4.p)
+	require.Equal(t, big.NewInt(19), f4.P)
 	require.Equal(t, big.NewInt(2), f4.Num)
 
 	f5, err := NewElement(big.NewInt(3), big.NewInt(11))

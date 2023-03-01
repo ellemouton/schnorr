@@ -190,22 +190,13 @@ func TestSign(t *testing.T) {
 
 			msg := parseHexStr(t, msgs[test.msgIndex])
 
-			sctx := &SessionContext{
-				AggPubNonce: aggNonce,
-				PubKeys:     pks,
-				Msg:         msg,
-			}
+			sctx := NewSessionContext(aggNonce, pks, msg, nil)
 
-			ps, err := Sign(secNonce, sk, sctx)
+			ps, err := Sign(sctx, secNonce, sk)
 			require.NoError(t, err)
 
 			expectedSig := parseHexStr(t, test.expectedSig)
 			require.True(t, bytes.Equal(expectedSig, ps.Bytes()))
-
-			err = PartialSigVerify(
-				ps, pns, pks, nil, msg, test.signerIndex,
-			)
-			require.NoError(t, err)
 		})
 	}
 }
@@ -271,8 +262,8 @@ func TestVerifyPartialSig(t *testing.T) {
 				return
 			}
 
-			err = PartialSigVerify(
-				psig, pns, pks, nil, msg, test.signerIndex,
+			err = psig.Verify(
+				pns, pks, nil, msg, test.signerIndex,
 			)
 			require.Error(t, err)
 		})
@@ -404,14 +395,11 @@ func TestPartialSigAgg(t *testing.T) {
 
 			expectedSig := parseHexStr(t, test.expected)
 
-			ctx := &SessionContext{
-				AggPubNonce: aggNonce,
-				PubKeys:     pks,
-				Msg:         parseHexStr(t, msg),
-				Tweaks:      tweakList,
-			}
+			ctx := NewSessionContext(
+				aggNonce, pks, parseHexStr(t, msg), tweakList,
+			)
 
-			aggSig, err := PartialSigAgg(partialSigs, ctx)
+			aggSig, err := ctx.PartialSigAgg(partialSigs)
 			require.NoError(t, err)
 
 			aggSigBytes := aggSig.Bytes()

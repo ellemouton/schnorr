@@ -12,12 +12,18 @@ import (
 const (
 	AuxTag   = "MuSig/aux"
 	NonceTag = "MuSig/nonce"
+
+	SecNonceLen = 97 // 32 + 32 + 33
+	PubNonceLen = 66 // 33 + 33
 )
 
 var zeroByteVector = bytes.Repeat([]byte{0x00}, 33)
 
+// NonceGenOption defines the signature of a functional option that can be used
+// to modify the NonceGen function.
 type NonceGenOption func(opts *nonceGenCfg)
 
+// nonceGenCfg holds all the optional NonceGen inputs.
 type nonceGenCfg struct {
 	sk       *schnorr.PrivateKey
 	aggPk    *schnorr.PublicKey
@@ -26,50 +32,65 @@ type nonceGenCfg struct {
 	randByte *[32]byte
 }
 
+// defaultNonceGenCfg constructs an empty nonceGenCfg.
 func defaultNonceGenCfg() *nonceGenCfg {
 	return &nonceGenCfg{}
 }
 
+// WithOptionSecretKey sets the optional secret key parameter (sk) of the
+// NonceGen algo.
 func WithOptionSecretKey(sk *schnorr.PrivateKey) NonceGenOption {
 	return func(opts *nonceGenCfg) {
 		opts.sk = sk
 	}
 }
 
+// WithOptionAggKey sets the optional aggregated x-only pub key (aggpk) of the
+// NonceGen algo.
 func WithOptionAggKey(aggKey *schnorr.PublicKey) NonceGenOption {
 	return func(opts *nonceGenCfg) {
 		opts.aggPk = aggKey
 	}
 }
 
+// WithOptionMessage sets the optional msg param of the NonceGen algo.
 func WithOptionMessage(m []byte) NonceGenOption {
 	return func(opts *nonceGenCfg) {
 		opts.m = m
 	}
 }
 
+// WithOptionExtraIn sets the optional auxiliary input (extra_in) of the
+// NonceGen algo.
 func WithOptionExtraIn(aux []byte) NonceGenOption {
 	return func(opts *nonceGenCfg) {
 		opts.extraIn = aux
 	}
 }
 
+// WithRandBytes optionally sets the rand param of the NonceGen func. If this
+// value is not manually set, then the crypt/rand package will be used to
+// draw this value.
 func WithRandBytes(rand [32]byte) NonceGenOption {
 	return func(opts *nonceGenCfg) {
 		opts.randByte = &rand
 	}
 }
 
+// Nonce comprises a secnonce and a pubnonce.
 type Nonce struct {
 	*SecNonce
 	*PubNonce
 }
 
+// SecNonce holds all the objects required to construct the `secnonce` part of
+// a Nonce.
 type SecNonce struct {
 	k1, k2 *schnorr.PrivateKey
 	pk     *schnorr.PublicKey
 }
 
+// GetPubNonce returns the corresponding public nonce of the SecNonce.
 func (s *SecNonce) GetPubNonce() *PubNonce {
 	return &PubNonce{
 		R1: s.k1.PubKey,
@@ -77,8 +98,11 @@ func (s *SecNonce) GetPubNonce() *PubNonce {
 	}
 }
 
+// Bytes returns the serialised SecNonce.
+//
+//	k1 || k2 || pk
 func (s *SecNonce) Bytes() []byte {
-	res := make([]byte, 32+32+33)
+	res := make([]byte, SecNonceLen)
 
 	k1Bytes := s.k1.Bytes()
 	copy(res[:32], k1Bytes[:])
@@ -90,8 +114,9 @@ func (s *SecNonce) Bytes() []byte {
 	return res
 }
 
+// ParseSecNonce constructs a SecNonce from the given byte slice.
 func ParseSecNonce(b []byte) (*SecNonce, error) {
-	if len(b) != 32+32+33 {
+	if len(b) != SecNonceLen {
 		return nil, fmt.Errorf("invalid sec nonce len")
 	}
 
@@ -117,12 +142,16 @@ func ParseSecNonce(b []byte) (*SecNonce, error) {
 	}, nil
 }
 
+// PubNonce consists of the two Public nonces that make up the PubNonce.
+//
+//	R = R1 + b*R2
 type PubNonce struct {
 	R1, R2 *schnorr.PublicKey
 }
 
+// ParsePubNonce constructs a PubNonce from the given byte slice.
 func ParsePubNonce(b []byte) (*PubNonce, error) {
-	if len(b) != 66 {
+	if len(b) != PubNonceLen {
 		return nil, fmt.Errorf("bad pub nonce len")
 	}
 
@@ -153,8 +182,10 @@ func ParsePubNonce(b []byte) (*PubNonce, error) {
 	}, nil
 }
 
+// Bytes serialises the given PubNonce.
+//   cbytes(p.R1) || cbytes(p.R2)
 func (p *PubNonce) Bytes() []byte {
-	res := make([]byte, 66)
+	res := make([]byte, PubNonceLen)
 
 	if p.R1.IsInfinity {
 		copy(res[:33], zeroByteVector)
@@ -171,7 +202,12 @@ func (p *PubNonce) Bytes() []byte {
 	return res
 }
 
+// NonceGen generates a Nonce from the given set of inputs.
 func NonceGen(pk *schnorr.PublicKey, opts ...NonceGenOption) (*Nonce, error) {
+	if pk == nil {
+		return nil, fmt.Errorf("a public key must be specified")
+	}
+
 	cfg := defaultNonceGenCfg()
 	for _, o := range opts {
 		o(cfg)
@@ -179,10 +215,6 @@ func NonceGen(pk *schnorr.PublicKey, opts ...NonceGenOption) (*Nonce, error) {
 
 	if len(cfg.extraIn) > math.MaxUint32 {
 		return nil, fmt.Errorf("extra input too long")
-	}
-
-	if pk == nil {
-		return nil, fmt.Errorf("a public key must be specified")
 	}
 
 	// Let rand' be a 32-byte array freshly drawn uniformly at random.
@@ -246,7 +278,6 @@ func NonceGen(pk *schnorr.PublicKey, opts ...NonceGenOption) (*Nonce, error) {
 	}, nil
 }
 
-// Let ki = int(hashMuSig/nonce(rand || bytes(1, len(pk)) || pk || bytes(1, len(aggpk)) || aggpk || m_prefixed || bytes(4, len(extra_in)) || extra_in || bytes(1, i - 1))) mod n for i = 1,2
 func makeNonce(i uint8, pk *schnorr.PublicKey, rand, aggPk, mPrefixed,
 	extraIn []byte) (*schnorr.PrivateKey, error) {
 
@@ -263,11 +294,10 @@ func makeNonce(i uint8, pk *schnorr.PublicKey, rand, aggPk, mPrefixed,
 		[]byte{i - 1},
 	)
 
-	ii := schnorr.IntFromBytes(hash)
-
-	return schnorr.PrivateKeyFromInt(ii)
+	return schnorr.PrivateKeyFromInt(schnorr.IntFromBytes(hash))
 }
 
+// NonceAgg aggregates the given set of PubNonces into a single PubNonce.
 func NonceAgg(pNonces []*PubNonce) *PubNonce {
 	nonces := []*schnorr.PublicKey{
 		schnorr.NewInfinityPubKey(), schnorr.NewInfinityPubKey(),

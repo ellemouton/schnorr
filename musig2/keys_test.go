@@ -145,7 +145,12 @@ func TestKeyAgg(t *testing.T) {
 			require.NoError(t, err)
 
 			if len(ts) != 0 {
-				aggKeyCtx, err = ApplyTweak(aggKeyCtx, ts[0], test.isXOnlyT)
+				tweak, err := NewTweak(ts[0], test.isXOnlyT)
+				if err != nil && test.expectErr {
+					return
+				}
+
+				err = aggKeyCtx.ApplyTweak(tweak)
 				if err != nil && test.expectErr {
 					return
 				}
@@ -276,14 +281,11 @@ func TestApplyTweak(t *testing.T) {
 				require.NoError(t, err)
 			}
 
-			ctx := &SessionContext{
-				AggPubNonce: aggNonce,
-				PubKeys:     pks,
-				Msg:         msgBytes,
-				Tweaks:      tweakList,
-			}
+			ctx := NewSessionContext(
+				aggNonce, pks, msgBytes, tweakList,
+			)
 
-			partialSig, err := Sign(secNonce, secKey, ctx)
+			partialSig, err := Sign(ctx, secNonce, secKey)
 			require.NoError(t, err)
 
 			expectedSig := parseHexStr(t, test.expected)
